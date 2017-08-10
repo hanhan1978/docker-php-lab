@@ -1,5 +1,5 @@
 
-FROM php:7.1.7-fpm-alpine
+FROM php:7.1.8-fpm-alpine
 
 MAINTAINER hanhan1978 <ryo.tomidokoro@gmail.com>
 
@@ -14,17 +14,33 @@ RUN apk upgrade --update \
     && docker-php-ext-install  mcrypt \
     && docker-php-ext-install  pdo_mysql \
     && docker-php-ext-install  zip \
+    && docker-php-ext-install opcache \
     && mkdir /run/nginx
 
-# install composer
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
-  && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
-  && php -r "unlink('composer-setup.php');"
+# install redis-ext
+ENV PHPREDIS_VERSION 3.1.3
+RUN mkdir -p /usr/src/php/ext/redis \
+    && curl -L https://github.com/phpredis/phpredis/archive/$PHPREDIS_VERSION.tar.gz | tar xvz -C /usr/src/php/ext/redis --strip 1 \
+    && echo 'redis' >> /usr/src/php-available-exts \
+    && docker-php-ext-install redis
 
-COPY laravel/composer.json /tmp/composer.json
-COPY laravel/composer.lock /tmp/composer.lock
-ENV COMPOSER_ALLOW_SUPERUSER 1
-RUN composer install --no-scripts --no-autoloader -d /tmp
+# install libevent-ext
+RUN apk add libevent-dev \
+    && cd /tmp \
+    && git clone https://github.com/expressif/pecl-event-libevent.git \
+    && mv pecl-event-libevent /usr/src/php/ext/libevent \
+    && echo 'libevent' >> /usr/src/php-available-exts \
+    && docker-php-ext-install libevent
+
+# install composer
+#RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+#  && php composer-setup.php --install-dir=/usr/local/bin --filename=composer \
+#  && php -r "unlink('composer-setup.php');"
+#
+#COPY laravel/composer.json /tmp/composer.json
+#COPY laravel/composer.lock /tmp/composer.lock
+#ENV COMPOSER_ALLOW_SUPERUSER 1
+#RUN composer install --no-scripts --no-autoloader -d /tmp
 
 COPY ./var/conf/nginx.conf /etc/nginx/nginx.conf
 
@@ -32,8 +48,8 @@ COPY laravel /var/www/laravel
 
 WORKDIR /var/www/laravel
 
-RUN mv -n /tmp/vendor ./ \
-  && composer dump-autoload
+#RUN mv -n /tmp/vendor ./ \
+#  && composer dump-autoload
 
 RUN chown www-data:www-data storage/logs \
     && chown -R www-data:www-data storage/framework \
